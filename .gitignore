@@ -161,4 +161,4 @@ cython_debug/
 
 #others
 .vs
-output.text
+output.txt
