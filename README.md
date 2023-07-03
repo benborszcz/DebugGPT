@@ -16,6 +16,12 @@ cd DebugGPT
 pip install .
 ```
 
+Before you start using DebugGPT, you need to set up your OpenAI API key. Create a `.env` file in the root directory of the project and add your OpenAI API key like this:
+
+```bash
+OPENAI_API_KEY=your-api-key-here
+```
+
 ## Usage
 
 To use DebugGPT, simply run the `dgpt` command followed by the path to the Python script you want to debug:
