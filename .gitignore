@@ -163,3 +163,4 @@ cython_debug/
 .vs
 output.txt
 backup
+pre_error_fix

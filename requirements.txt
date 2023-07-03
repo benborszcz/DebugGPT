@@ -2,3 +2,4 @@ python-dotenv
 openai
 backoff
 rich
+inquirer

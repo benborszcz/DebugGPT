@@ -1,487 +1,132 @@
-# agent.py
-```
-import config
-import openai
-import json
-from tenacity import retry, wait_random_exponential, stop_after_attempt
-
-# Set the API Params for OpenAI
-openai.api_key = config.OPENAI_API_KEY
-
-class Agent:
-    def __init__(self, id, system: str = "You are a helpful assistant", additional_messages: list = None, functions: list = None):
-        self.id = id
-        self.system = system
-        self.additional_messages = additional_messages
-        self.functions = {}
-        if functions != None:
-            for function in functions:
-                self.functions[function.name] = function
-        else:
-            self.functions = functions
-    
-    def generate(self, messages: list, temperature=0.1, presence_penalty=0.0, frequency_penalty=0.0, max_tokens=1000):      
-        local_messages = []
-        local_messages.extend(messages)
-        local_messages.insert(0, {"role": "system", "content": self.system})
-        if self.additional_messages != None: local_messages.insert(1, self.additional_messages)
-        response = self.chat_completion(local_messages)
-        return response
-    
-    @retry(wait=wait_random_exponential(min=1, max=40), stop=stop_after_attempt(3))
-    def chat_completion(self, messages: list, temperature=0.4, presence_penalty=0.1, frequency_penalty=0.1, max_tokens=1000):
-        # Generate a response using the OpenAI API
-        if self.functions == None:
-            response = openai.ChatCompletion.create(
-                model="gpt-3.5-turbo-0613",
-                messages=messages,
-                temperature=temperature,
-                presence_penalty=presence_penalty,
-                frequency_penalty=frequency_penalty,
-                max_tokens=max_tokens,
-            )
-            return response
-        else:
-            passed_functions = []
-            function_response = None
-            for key, value in self.functions.items():
-                passed_functions.append(value.to_dict())
-
-            response = openai.ChatCompletion.create(
-                model="gpt-3.5-turbo-0613",
-                messages=messages,
-                temperature=temperature,
-                presence_penalty=presence_penalty,
-                frequency_penalty=frequency_penalty,
-                max_tokens=max_tokens,
-                functions=passed_functions
-            )
-            response_message = response["choices"][0]["message"]
-            if response_message.get("function_call"):
-                # Step 3: call the function
-                # Note: the JSON response may not always be valid; be sure to handle errors
-                function_name = response_message["function_call"]["name"]
-                fuction_to_call = self.functions[function_name]
-                function_args = json.loads(response_message["function_call"]["arguments"])
-                function_response = fuction_to_call.process_instruction(function_args)
-                return {'choices': [{'message': {'content':function_response}}]}
-            return response
-            
-```
-
-# agent_manager.py
-```
-from agent import Agent
-from get_files import GetFiles
-from edit_file import EditFile
-
-class AgentManager:
-    def __init__(self, change_logger):
-        self.agents = {
-            "Chat": Agent("Chat"),
-            "ErrorAnalysis": Agent("ErrorAnalysis", "You analyze programming error codes, identify the files invloved, and explain the error in natural language."),
-            "FileRequester": Agent("FileRequester", "Given a natural language representation of a programming error code, you: request the necessary files to read to solve the error.", functions=[GetFiles()]),
-            "StepPlanner": Agent("StepPlanner", "Given a natural language representation of a programming error code and the necessary files to read, you give a step by step plan to solve the problem. The plan you are giving is to another language model that has access to edit files. It does not run code. It can edit a file by calling the tool edit_file(file, new_contents), where the new_contents are the entirety of the files contents with the error fixed. Solve it in the simplest way possible."),
-            "CodeModifier": Agent("CodeModifier", "Given a natural language representation of a programming error code, the necessary files, and a step by step plan to fix the error, you follow the steps and generate the necessary code to solve the problem. You can only call the functions provided", functions=[EditFile()]),
-            "ErrorComparison": Agent("ErrorComparison", "Given two errors, you compare them and see if progress was made in debugging."),
-            "ProgressIdentifier": Agent("ProgressIdentifier", "Given a passage comparing two errors to see if progress was made identify if it was, respond 't' for yes and 'f' for no. Do NOT generate any other characters."),
-            "Revert": Agent("Revert")
-        }
-
-    def generate(self, agent_id: str, messages: list = None):
-        if messages == None : messages = []
-
-        response = self.agents[agent_id].generate(messages=messages)
-
-        response_message = response['choices'][0]['message']['content']
-        return response_message
-```
-
-# config.py
-```
-import os
-from dotenv import load_dotenv
-
-load_dotenv()
-
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-
-DEBUG = True
-```
-
-# DEVPLAN.md
-```
-# DebugGPT
-
-## Explanation of tool
-
-Cli tool that you can call to debug your code using GPT-4
-
-## How it will work
-
-Give file to run
-â¬‡ï¸
-Generate file structure visual (folder2text)
-â¬‡ï¸
-Analyze Error Code
-â¬‡ï¸
-Select Necessary Files
-â¬‡ï¸ 
-Generate txt file representation (folder2text)
-â¬‡ï¸
-Generate code/solution to fix the problem
-â¬‡ï¸
-Take steps to complete solution (functions)
-â¬‡ï¸
-Test to see if solution fixed error
-â¬‡ï¸
-Return result of pass
-â¬‡ï¸
-Ask user if theyâ€™d like to revert
-```
-
-# edit_file.py
-```
-from function import Function
-import os
-
-class EditFile(Function):
-
-    def __init__(self):
-        self.name="edit_file"
-        self.description="allows for the editing of files"
-        self.parameters={
-            "type": "object",
-            "properties": {
-                "file": {
-                    "type": "string",
-                    "description": "name of the file",
-                },
-                "new_contents": {
-                    "type": "string",
-                    "description": "new contents of the file, you must write the entire file",
-                },
-            },
-            "required": ["file", "new_contents"],
-        }
-        super().__init__(self.name, self.description, self.parameters)       
-
-
-    def process_instruction(self, function_args) -> str:
-        file = function_args.get('file')
-        new_contents = function_args.get('new_contents')
-
-        if not os.path.exists(file):
-            return f"File {file} does not exist."
-
-        try:
-            with open(file, 'w') as f:
-                f.write(new_contents)
-            return f"File {file} has been successfully edited."
-        except Exception as e:
-            return "Error: "+str(e)
-```
-
-# function.py
-```
-from abc import ABC, abstractmethod
-
-class Function(ABC):
-
-    def __init__(self, name, description, parameters):
-        self.name = name
-        self.description = description
-        self.parameters = parameters
-
-    def to_dict(self):
-        return {
-            "name": self.name,
-            "description": self.description,
-            "parameters": self.parameters
-        }
-        
-    @abstractmethod
-    def process_instruction(self, function_args) -> str:
-        pass
-```
-
-# get_files.py
-```
-from function import Function
-import os
-
-class GetFiles(Function):
-
-    def __init__(self):
-        self.name="get_files"
-        self.description="Gets the files asked for"
-        self.parameters={
-            "type": "object",
-            "properties": {
-                "file": {
-                    "type": "string",
-                    "description": "name of the file required",
-                }
-            },
-            "required": ["file"],
-        }
-        super().__init__(self.name, self.description, self.parameters)       
-
-
-    def process_instruction(self, function_args) -> str:
-        file = function_args.get('file', "")
-        result = ""
-
-        if os.path.exists(file):
-            with open(file, 'r') as f:
-                content = f.read()
-            result += f"# {file}\n```{file.split('.')[-1]}\n{content}\n```\n\n"
-        else:
-            result += f"# {file}\n```File not found```\n\n"
-
-        return result
-
-
-    """
-    def process_instruction(self, **kwargs) -> str:
-        files = kwargs.get('file', [])
-        result = ""
-
-        for file in files:
-            if os.path.exists(file):
-                with open(file, 'r') as f:
-                    content = f.read()
-                result += f"# {file}\n```{file.split('.')[-1]}\n{content}\n```\n\n"
-            else:
-                result += f"# {file}\n```File not found```\n\n"
-
-        return result
-    """
-
-```
-
-# LICENSE
-```
-MIT License
-
-Copyright (c) 2023 benborszcz
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
-
-```
-
-# main.py
-```
-from script_runner import ScriptRunner
-from agent_manager import AgentManager
-
-manager = AgentManager()
-
-
-
-def debug_script(script):
-    runner = ScriptRunner(script)
-    print("-----Running Script-----")
-    status, output = runner.run_script()
-    print(output)
-    if not status:
-        print("-----Analyzing Output-----")
-        error_analysis_output = manager.generate("ErrorAnalysis", [{"role":"user","content":output}])
-        print(error_analysis_output)
-        print("-----Requesting Files-----")
-        file_getter_output = manager.generate("FileRequester", [{"role":"user","content":str(error_analysis_output)}])
-        print(file_getter_output)
-        print("-----Planning Solution-----")
-        step_planner_output = manager.generate("StepPlanner", [{"role":"user","content":(str(error_analysis_output)+"\n\n"+str(file_getter_output))}])
-        print(step_planner_output)
-        print("-----Editing Files-----")
-        code_modifier_output = manager.generate("CodeModifier", [{"role":"user","content":(str(error_analysis_output)+"\n\n"+str(file_getter_output)+"\n\n"+str(step_planner_output))}])
-        print(code_modifier_output)
-        print("-----Running Script-----")
-        status, new_output = runner.run_script()
-        print(new_output)
-        if not status:
-            print("-----Analyzing Output-----")
-            edit_analysis_output = manager.generate("ErrorAnalysis", [{"role":"user","content":new_output}])
-            print(edit_analysis_output)
-            print("-----Analyzing Progress-----")
-            compare_errors_output = manager.generate("ErrorComparison", [{"role":"user","content":f"Old Error: {str(error_analysis_output)}\n\nNew Error:{str(edit_analysis_output)}"}])
-            print(compare_errors_output)
-            print("-----Deciding Next Step-----")
-            progress_id_output = manager.generate("ProgressIdentifier", [{"role":"user","content":str(compare_errors_output)}])
-            print(progress_id_output)
-            if progress_id_output == 't' :
-                debug_script(script)
-            else:
-                print("revert")
-    return status
-
-debug_script('test_script.py')
-```
-
-# README.md
-```
-# DebugGPT
-```
-
-# requirements.txt
-```
-python-dotenv
-openai
-tenacity
-```
-
-# script_runner.py
-```
-import traceback
-import runpy
-
-class ScriptRunner:
-
-    def __init__(self, script_path):
-        self.script_path = script_path
-
-    def run_script(self):
-        try:
-            runpy.run_path(self.script_path)
-            return True, f"Running {self.script_path} Successful"
-        except Exception as e:
-            return False, "".join(traceback.format_exception(type(e), e, e.__traceback__))
-```
-
-# test_script.py
-```
-print("geek")
-
-j = 10
-
-for i in range(3):
-    a = j * i
-
-print(a)
-
-```
-
-# test_script_2.py
-```
-# test_script_2.py
-
-# Error 1: Syntax Error
-print("Welcome to the Error Program")
-print("This program contains multiple errors.")
-
-# Error 2: NameError
-x = 0
-print("The value of x is: ", x)
-
-# Error 3: TypeError
-y = "5"
-z = 10
-result = y + str(z)
-
-# Error 4: IndexError
-numbers = [1, 2, 3, 4]
-print(numbers[3])
-
-# Error 5: ZeroDivisionError
-a = 10
-b = 1
-result = a / b
-
-# Error 6: IndentationError
-print("This line has incorrect indentation.")
-print("This line has correct indentation.")
-
-# Error 7: AttributeError
-message = "Hello, world!"
-print(len(message))
-
-# Error 8: ValueError
-number = 123
-
-# Error 9: FileNotFoundError
-file = open("existing_file.txt", "w")
-
-# Error 10: AssertionError
-assert 2 + 2 == 4, "Math is broken!"
-
-# Error 11: KeyError
-dictionary = {"key": "value"}
-print(dictionary["key"])  # Access a valid key instead of 'nonexistent_key'
-
-```
-
-# test_script_2_prefix.py
-```
-# Error 1: Syntax Error
-print("Welcome to the Error Program")
-print("This program contains multiple errors.")
-
-# Error 2: NameError
-print("The value of x is: ", x)
-
-# Error 3: TypeError
-y = "5"
-z = 10
-result = y + z
-
-# Error 4: IndexError
-numbers = [1, 2, 3]
-print(numbers[3])
-
-# Error 5: ZeroDivisionError
-a = 10
-b = 0
-result = a / b
-
-# Error 6: IndentationError
-print("This line has incorrect indentation.")
-print("This line has correct indentation.")
-
-# Error 7: AttributeError
-message = "Hello, world!"
-print(message.length)
-
-# Error 8: ValueError
-number = int("abc")
-
-# Error 9: FileNotFoundError
-file = open("nonexistent_file.txt", "r")
-
-# Error 10: AssertionError
-assert 2 + 2 == 5, "Math is broken!"
-
-# Error 11: KeyError
-dictionary = {"key": "value"}
-print(dictionary["nonexistent_key"])
-
-```
-
-# test_script_prefix.py
-```
-prit("geek")
-
-
-for i in range(3):
-    a = j * i
-
-print(a)
-
-```
-
+.
++---.git
+|   |---COMMIT_EDITMSG
+|   |---config
+|   |---description
+|   |---FETCH_HEAD
+|   |---HEAD
+|   +---hooks
+|   |   |---applypatch-msg.sample
+|   |   |---commit-msg.sample
+|   |   |---fsmonitor-watchman.sample
+|   |   |---post-update.sample
+|   |   |---pre-applypatch.sample
+|   |   |---pre-commit.sample
+|   |   |---pre-merge-commit.sample
+|   |   |---pre-push.sample
+|   |   |---pre-rebase.sample
+|   |   |---pre-receive.sample
+|   |   |---prepare-commit-msg.sample
+|   |   |---push-to-checkout.sample
+|   |   |---sendemail-validate.sample
+|   |   |---update.sample
+|   |---index
+|   +---info
+|   |   |---exclude
+|   +---logs
+|   |   |---HEAD
+|   |   +---refs
+|   |   |   +---heads
+|   |   |   |   |---main
+|   |   |   +---remotes
+|   |   |   |   +---origin
+|   |   |   |   |   |---HEAD
+|   |   |   |   |   |---main
+|   +---objects
+|   |   +---0a
+|   |   |   |---2770c31a4496fd462d9096b63630d378a4b587
+|   |   +---0c
+|   |   |   |---4f7d5039967141a4b63ffba06904ff73e9ec55
+|   |   +---0f
+|   |   |   |---63b77a8515709c48c24921ddbaff5ae1bd3666
+|   |   +---10
+|   |   |   |---4ce94d7fcb628d7f4c0d5094ba413f400e8b2a
+|   |   +---12
+|   |   |   |---b3e823c79d66e4eb26323bb9fc6ee5763bb705
+|   |   +---13
+|   |   |   |---f0330012dc3324891b75e1e50c85e7089c31b4
+|   |   +---1b
+|   |   |   |---fe300830a1eeffc6f389ad91af8f600db8b7b8
+|   |   +---30
+|   |   |   |---645a6f2128ef6ff3a726c0b6318ed02c82968b
+|   |   |   |---d7f3b9b1d5f6e219f94b1ce30ffe961b539c10
+|   |   +---36
+|   |   |   |---4d794d5d5b60987d31dfd14b44f58e074fedb5
+|   |   +---39
+|   |   |   |---43c86e593011332ddbd5c7b993a1f38681c4a6
+|   |   +---44
+|   |   |   |---e8ebb25d6302220e6b88f31f118807070ec9df
+|   |   +---50
+|   |   |   |---62902885461a413fece4e3b17ece9dd4f740af
+|   |   +---52
+|   |   |   |---808efeed2bd0185333c7dfb3a2268245d3fdf8
+|   |   +---56
+|   |   |   |---01f91ded741b7d2fd8b6a83eef187ac9c08799
+|   |   +---60
+|   |   |   |---c2946acf3878bd984c9f3b5fdb5ee0208f4686
+|   |   +---65
+|   |   |   |---1e22bc5032f37542bb3ded81ffd15f931848af
+|   |   +---6f
+|   |   |   |---f20a2177232c0d335f84d7bcc9a213d6f2f561
+|   |   +---7e
+|   |   |   |---fce4a08dab44f8c7a5bf16d2e08806c170feeb
+|   |   +---89
+|   |   |   |---f26ef520f64bc53c2a6310576f33b9fc800a18
+|   |   +---a9
+|   |   |   |---e14ebb3f80893d9a9c771ed49c0e3b792940bd
+|   |   +---ab
+|   |   |   |---91e06b6590c9480a8b1536bd50806e9aa9ad39
+|   |   +---bb
+|   |   |   |---bf53cec85e6b1037aeb0e7c38e0a9d6e5f12cc
+|   |   +---be
+|   |   |   |---ad013228f86cae5492cae3d9131c9bc4eab581
+|   |   +---c4
+|   |   |   |---2c6de4d34fb50f27c17b0196594dc3d57293ff
+|   |   +---cc
+|   |   |   |---0d48ec7bf1161da244c887deb83ddcbc60a8df
+|   |   +---d6
+|   |   |   |---82872f4a1ff868fce600fb07e84747c0a645f1
+|   |   |   |---c95d4d5c279262022b98bf3feb707953b3930d
+|   |   +---e1
+|   |   |   |---1021c223c1fea485e2495a9e1ed6244324c4da
+|   |   +---e6
+|   |   |   |---9de29bb2d1d6434b8b29ae775ad8c2e48c5391
+|   |   +---e9
+|   |   |   |---667ce492739979cf45d054707eced8bc5af359
+|   |   +---f9
+|   |   |   |---12046c183f73a96fb3f8ae1e5fc0679cad581c
+|   |   +---fb
+|   |   |   |---e560b2c7d6ef60b2d802d8c6162bf19da01d65
+|   |   |   |---f9071ad9f930cc6befa6fc30e4297498dab51c
+|   |   +---fe
+|   |   |   |---0a6ff826230bb4bde3de5ee421edc314b773ab
+|   |   +---info
+|   |   +---pack
+|   |   |   |---pack-435245bda951008f3aff604f329892d5f17ba30d.idx
+|   |   |   |---pack-435245bda951008f3aff604f329892d5f17ba30d.pack
+|   |   |   |---pack-435245bda951008f3aff604f329892d5f17ba30d.rev
+|   |---ORIG_HEAD
+|   |---packed-refs
+|   +---refs
+|   |   +---heads
+|   |   |   |---main
+|   |   +---remotes
+|   |   |   +---origin
+|   |   |   |   |---HEAD
+|   |   |   |   |---main
+|   |   +---tags
+|---agent.py
+|---agent_manager.py
+|---change_logger.py
+|---cli.py
+|---config.py
++---DebugGPT.egg-info
+|---edit_file.py
+|---function.py
+|---get_files.py
+|---LICENSE
+|---README.md
+|---requirements.txt
+|---script_runner.py
+|---setup.py
++---__pycache__

@@ -1,4 +1,4 @@
-from function import Function
+from .function import Function
 import os
 
 class EditFile(Function):
@@ -33,6 +33,13 @@ class EditFile(Function):
         try:
             with open(file, 'w') as f:
                 f.write(new_contents)
-            return f"File {file} has been successfully edited."
+
+            # Delete specific .pyc file in __pycache__ if it exists
+            pycache_file = os.path.join(os.path.dirname(file), "__pycache__", os.path.basename(file).split('.')[0] + ".cpython-XX.pyc")
+            pycache_file = pycache_file.replace("XX", str(os.sys.version_info.major) + str(os.sys.version_info.minor)) # replace XX with current python version
+            if os.path.exists(pycache_file):
+                os.remove(pycache_file)
+
+            return f"File {file} has been successfully edited and associated .pyc file deleted."
         except Exception as e:
             return "Error: "+str(e)
