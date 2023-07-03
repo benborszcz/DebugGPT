@@ -2,6 +2,7 @@
 ```
 import config
 import openai
+import json
 from tenacity import retry, wait_random_exponential, stop_after_attempt
 
 # Set the API Params for OpenAI
@@ -11,13 +12,15 @@ class Agent:
     def __init__(self, id, system: str = "You are a helpful assistant", additional_messages: list = None, functions: list = None):
         self.id = id
         self.system = system
-        self.functions = functions
-        if self.functions == None: 
-            self.functions = []
-            self.function_agent = None
         self.additional_messages = additional_messages
+        self.functions = {}
+        if functions != None:
+            for function in functions:
+                self.functions[function.name] = function
+        else:
+            self.functions = functions
     
-    def generate(self, messages: list, temperature=0.4, presence_penalty=0.1, frequency_penalty=0.1, max_tokens=1000):      
+    def generate(self, messages: list, temperature=0.1, presence_penalty=0.0, frequency_penalty=0.0, max_tokens=1000):      
         local_messages = []
         local_messages.extend(messages)
         local_messages.insert(0, {"role": "system", "content": self.system})
@@ -28,32 +31,60 @@ class Agent:
     @retry(wait=wait_random_exponential(min=1, max=40), stop=stop_after_attempt(3))
     def chat_completion(self, messages: list, temperature=0.4, presence_penalty=0.1, frequency_penalty=0.1, max_tokens=1000):
         # Generate a response using the OpenAI API
-        response = openai.ChatCompletion.create(
-            model="gpt-3.5-turbo",
-            messages=messages,
-            temperature=temperature,
-            presence_penalty=presence_penalty,
-            frequency_penalty=frequency_penalty,
-            max_tokens=max_tokens
-        )
+        if self.functions == None:
+            response = openai.ChatCompletion.create(
+                model="gpt-3.5-turbo-0613",
+                messages=messages,
+                temperature=temperature,
+                presence_penalty=presence_penalty,
+                frequency_penalty=frequency_penalty,
+                max_tokens=max_tokens,
+            )
+            return response
+        else:
+            passed_functions = []
+            function_response = None
+            for key, value in self.functions.items():
+                passed_functions.append(value.to_dict())
 
-        return response
+            response = openai.ChatCompletion.create(
+                model="gpt-3.5-turbo-0613",
+                messages=messages,
+                temperature=temperature,
+                presence_penalty=presence_penalty,
+                frequency_penalty=frequency_penalty,
+                max_tokens=max_tokens,
+                functions=passed_functions
+            )
+            response_message = response["choices"][0]["message"]
+            if response_message.get("function_call"):
+                # Step 3: call the function
+                # Note: the JSON response may not always be valid; be sure to handle errors
+                function_name = response_message["function_call"]["name"]
+                fuction_to_call = self.functions[function_name]
+                function_args = json.loads(response_message["function_call"]["arguments"])
+                function_response = fuction_to_call.process_instruction(function_args)
+                return {'choices': [{'message': {'content':function_response}}]}
+            return response
+            
 ```
 
 # agent_manager.py
 ```
 from agent import Agent
-
+from get_files import GetFiles
+from edit_file import EditFile
 
 class AgentManager:
-    def __init__(self):
+    def __init__(self, change_logger):
         self.agents = {
             "Chat": Agent("Chat"),
             "ErrorAnalysis": Agent("ErrorAnalysis", "You analyze programming error codes, identify the files invloved, and explain the error in natural language."),
-            "FileRequester": Agent("FileRequester", "Given a natural language representation of a programming error code, you: request the necessary files to read to solve the error."),
-            "StepPlanner": Agent("StepPlanner", "Given a natural language representation of a programming error code and the necessary files to read, you give a step by step plan to solve the problem."),
-            "CodeModifier": Agent("CodeModifier", "Given a natural language representation of a programming error code, the necessary files, and a step by step plan to fix the error, you follow the steps and generate the necessary code to solve the problem. The code generated should be"),
-            "ErrorComparison": Agent("ErrorComparison"),
+            "FileRequester": Agent("FileRequester", "Given a natural language representation of a programming error code, you: request the necessary files to read to solve the error.", functions=[GetFiles()]),
+            "StepPlanner": Agent("StepPlanner", "Given a natural language representation of a programming error code and the necessary files to read, you give a step by step plan to solve the problem. The plan you are giving is to another language model that has access to edit files. It does not run code. It can edit a file by calling the tool edit_file(file, new_contents), where the new_contents are the entirety of the files contents with the error fixed. Solve it in the simplest way possible."),
+            "CodeModifier": Agent("CodeModifier", "Given a natural language representation of a programming error code, the necessary files, and a step by step plan to fix the error, you follow the steps and generate the necessary code to solve the problem. You can only call the functions provided", functions=[EditFile()]),
+            "ErrorComparison": Agent("ErrorComparison", "Given two errors, you compare them and see if progress was made in debugging."),
+            "ProgressIdentifier": Agent("ProgressIdentifier", "Given a passage comparing two errors to see if progress was made identify if it was, respond 't' for yes and 'f' for no. Do NOT generate any other characters."),
             "Revert": Agent("Revert")
         }
 
@@ -62,8 +93,8 @@ class AgentManager:
 
         response = self.agents[agent_id].generate(messages=messages)
 
-        response_message = response['choices'][0]['message'] 
-        return {"role": response_message['role'], "content": response_message['content']}
+        response_message = response['choices'][0]['message']['content']
+        return response_message
 ```
 
 # config.py
@@ -109,59 +140,124 @@ Return result of pass
 Ask user if they’d like to revert
 ```
 
+# edit_file.py
+```
+from function import Function
+import os
+
+class EditFile(Function):
+
+    def __init__(self):
+        self.name="edit_file"
+        self.description="allows for the editing of files"
+        self.parameters={
+            "type": "object",
+            "properties": {
+                "file": {
+                    "type": "string",
+                    "description": "name of the file",
+                },
+                "new_contents": {
+                    "type": "string",
+                    "description": "new contents of the file, you must write the entire file",
+                },
+            },
+            "required": ["file", "new_contents"],
+        }
+        super().__init__(self.name, self.description, self.parameters)       
+
+
+    def process_instruction(self, function_args) -> str:
+        file = function_args.get('file')
+        new_contents = function_args.get('new_contents')
+
+        if not os.path.exists(file):
+            return f"File {file} does not exist."
+
+        try:
+            with open(file, 'w') as f:
+                f.write(new_contents)
+            return f"File {file} has been successfully edited."
+        except Exception as e:
+            return "Error: "+str(e)
+```
+
 # function.py
 ```
 from abc import ABC, abstractmethod
 
 class Function(ABC):
 
-    def __init__(self, name, instructions: str):
-        '''
-        Instructions must be formatted as so:
-
-        ## Tool Name
-
-        // General description of tool
-        // - Points or further descriptions
-        // -- Even more detailed descriptions of other points
-
-        namespace Tool Name {
-
-        // function description
-        type function_name = (_: {
-        // parameter 1
-        input: string,
-        // parameter 2
-        input_2: number,
-        }) => any;
-        
-        } // namespace Tool Name
-        '''
-
-        """
-        STRUCTURE TO PUT IN INSTRUCTIONS
-        {
-            "name": "get_current_weather",
-            "description": "Get the current weather in a given location",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "location": {
-                        "type": "string",
-                        "description": "The city and state, e.g. San Francisco, CA",
-                    },
-                    "unit": {"type": "string", "enum": ["celsius", "fahrenheit"]},
-                },
-                "required": ["location"],
-            },
-        }
-        """
+    def __init__(self, name, description, parameters):
         self.name = name
-        self.instructions = instructions
+        self.description = description
+        self.parameters = parameters
+
+    def to_dict(self):
+        return {
+            "name": self.name,
+            "description": self.description,
+            "parameters": self.parameters
+        }
         
     @abstractmethod
-    def process_instruction(self, **kwargs) -> str:
+    def process_instruction(self, function_args) -> str:
         pass
+```
+
+# get_files.py
+```
+from function import Function
+import os
+
+class GetFiles(Function):
+
+    def __init__(self):
+        self.name="get_files"
+        self.description="Gets the files asked for"
+        self.parameters={
+            "type": "object",
+            "properties": {
+                "file": {
+                    "type": "string",
+                    "description": "name of the file required",
+                }
+            },
+            "required": ["file"],
+        }
+        super().__init__(self.name, self.description, self.parameters)       
+
+
+    def process_instruction(self, function_args) -> str:
+        file = function_args.get('file', "")
+        result = ""
+
+        if os.path.exists(file):
+            with open(file, 'r') as f:
+                content = f.read()
+            result += f"# {file}\n```{file.split('.')[-1]}\n{content}\n```\n\n"
+        else:
+            result += f"# {file}\n```File not found```\n\n"
+
+        return result
+
+
+    """
+    def process_instruction(self, **kwargs) -> str:
+        files = kwargs.get('file', [])
+        result = ""
+
+        for file in files:
+            if os.path.exists(file):
+                with open(file, 'r') as f:
+                    content = f.read()
+                result += f"# {file}\n```{file.split('.')[-1]}\n{content}\n```\n\n"
+            else:
+                result += f"# {file}\n```File not found```\n\n"
+
+        return result
+    """
+
 ```
 
 # LICENSE
@@ -198,13 +294,45 @@ from agent_manager import AgentManager
 manager = AgentManager()
 
 
-# Usage
-runner = ScriptRunner('test_script.py')
-output = runner.run_script()
 
-error_analysis_output = manager.generate("ErrorAnalysis", [{"role":"user","content":output}])
-error_analysis_output = 
+def debug_script(script):
+    runner = ScriptRunner(script)
+    print("-----Running Script-----")
+    status, output = runner.run_script()
+    print(output)
+    if not status:
+        print("-----Analyzing Output-----")
+        error_analysis_output = manager.generate("ErrorAnalysis", [{"role":"user","content":output}])
+        print(error_analysis_output)
+        print("-----Requesting Files-----")
+        file_getter_output = manager.generate("FileRequester", [{"role":"user","content":str(error_analysis_output)}])
+        print(file_getter_output)
+        print("-----Planning Solution-----")
+        step_planner_output = manager.generate("StepPlanner", [{"role":"user","content":(str(error_analysis_output)+"\n\n"+str(file_getter_output))}])
+        print(step_planner_output)
+        print("-----Editing Files-----")
+        code_modifier_output = manager.generate("CodeModifier", [{"role":"user","content":(str(error_analysis_output)+"\n\n"+str(file_getter_output)+"\n\n"+str(step_planner_output))}])
+        print(code_modifier_output)
+        print("-----Running Script-----")
+        status, new_output = runner.run_script()
+        print(new_output)
+        if not status:
+            print("-----Analyzing Output-----")
+            edit_analysis_output = manager.generate("ErrorAnalysis", [{"role":"user","content":new_output}])
+            print(edit_analysis_output)
+            print("-----Analyzing Progress-----")
+            compare_errors_output = manager.generate("ErrorComparison", [{"role":"user","content":f"Old Error: {str(error_analysis_output)}\n\nNew Error:{str(edit_analysis_output)}"}])
+            print(compare_errors_output)
+            print("-----Deciding Next Step-----")
+            progress_id_output = manager.generate("ProgressIdentifier", [{"role":"user","content":str(compare_errors_output)}])
+            print(progress_id_output)
+            if progress_id_output == 't' :
+                debug_script(script)
+            else:
+                print("revert")
+    return status
 
+debug_script('test_script.py')
 ```
 
 # README.md
@@ -232,12 +360,128 @@ class ScriptRunner:
     def run_script(self):
         try:
             runpy.run_path(self.script_path)
+            return True, f"Running {self.script_path} Successful"
         except Exception as e:
-            return "".join(traceback.format_exception(type(e), e, e.__traceback__))
+            return False, "".join(traceback.format_exception(type(e), e, e.__traceback__))
 ```
 
 # test_script.py
 ```
-prit("Poopoo")
+print("geek")
+
+j = 10
+
+for i in range(3):
+    a = j * i
+
+print(a)
+
+```
+
+# test_script_2.py
+```
+# test_script_2.py
+
+# Error 1: Syntax Error
+print("Welcome to the Error Program")
+print("This program contains multiple errors.")
+
+# Error 2: NameError
+x = 0
+print("The value of x is: ", x)
+
+# Error 3: TypeError
+y = "5"
+z = 10
+result = y + str(z)
+
+# Error 4: IndexError
+numbers = [1, 2, 3, 4]
+print(numbers[3])
+
+# Error 5: ZeroDivisionError
+a = 10
+b = 1
+result = a / b
+
+# Error 6: IndentationError
+print("This line has incorrect indentation.")
+print("This line has correct indentation.")
+
+# Error 7: AttributeError
+message = "Hello, world!"
+print(len(message))
+
+# Error 8: ValueError
+number = 123
+
+# Error 9: FileNotFoundError
+file = open("existing_file.txt", "w")
+
+# Error 10: AssertionError
+assert 2 + 2 == 4, "Math is broken!"
+
+# Error 11: KeyError
+dictionary = {"key": "value"}
+print(dictionary["key"])  # Access a valid key instead of 'nonexistent_key'
+
+```
+
+# test_script_2_prefix.py
+```
+# Error 1: Syntax Error
+print("Welcome to the Error Program")
+print("This program contains multiple errors.")
+
+# Error 2: NameError
+print("The value of x is: ", x)
+
+# Error 3: TypeError
+y = "5"
+z = 10
+result = y + z
+
+# Error 4: IndexError
+numbers = [1, 2, 3]
+print(numbers[3])
+
+# Error 5: ZeroDivisionError
+a = 10
+b = 0
+result = a / b
+
+# Error 6: IndentationError
+print("This line has incorrect indentation.")
+print("This line has correct indentation.")
+
+# Error 7: AttributeError
+message = "Hello, world!"
+print(message.length)
+
+# Error 8: ValueError
+number = int("abc")
+
+# Error 9: FileNotFoundError
+file = open("nonexistent_file.txt", "r")
+
+# Error 10: AssertionError
+assert 2 + 2 == 5, "Math is broken!"
+
+# Error 11: KeyError
+dictionary = {"key": "value"}
+print(dictionary["nonexistent_key"])
+
+```
+
+# test_script_prefix.py
+```
+prit("geek")
+
+
+for i in range(3):
+    a = j * i
+
+print(a)
+
 ```
 
