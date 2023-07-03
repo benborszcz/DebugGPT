@@ -40,7 +40,7 @@ DebugGPT is released under the MIT License. See the LICENSE file for more detail
 
 ## Contributing
 
-Contributions to DebugGPT are welcome! Please see the CONTRIBUTING.md file for more details.
+Contributions to DebugGPT are welcome! Please see the ROADMAP.md file for more details.
 
 ## Contact
 
