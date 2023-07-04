@@ -16,6 +16,7 @@ class AgentManager:
             "CodeModifier": Agent("CodeModifier", "Given a natural language representation of a programming error code, the necessary files, and a step by step plan to fix the error, you follow the steps and generate the necessary code to solve the problem. You can only call the functions provided", functions=[EditFile()]),
             "ErrorComparison": Agent("ErrorComparison", "Given two errors, you compare them and see if progress was made in debugging."),
             "ProgressIdentifier": Agent("ProgressIdentifier", "Given a passage comparing two errors to see if progress was made identify if it was, respond 't' for yes and 'f' for no. Do NOT generate any other characters."),
+            "Summarizer": Agent("Summarizer", "Given a process of degugging code you summarize what happened in 2 sentences, cover what was wrong and what was changed. Do not mention the new error, ONLY explain the old one and how it was fixed. Do this as concisely as possible."),
             "Revert": Agent("Revert")
         }
 

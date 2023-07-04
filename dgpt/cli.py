@@ -105,6 +105,7 @@ def debug_script(script, verbose):
         console.print(new_output)
         
         progress_id_output = 'f'
+        compare_errors_output = ''
 
         # If the new script run status is not successful
         if not status:
@@ -126,7 +127,10 @@ def debug_script(script, verbose):
                 console.print("\nDebugGPT has identified no/reverse progress was made\n", style="bold red")
         
         console.print("Deciding Next Step", style="bold blue")
-        console.print("***User Input Required***", style="bold yellow")
+        summarization_output = manager.generate("Summarizer", [{"role":"user","content":"# Original Output\n"+str(error_analysis_output)+"\n\n# Fix\n"+str(step_planner_output)+"\n\n# New Output Comparison\n"+str(compare_errors_output)+"\n\nSummarize what happened in 2 sentences, cover what was wrong and what was changed. Do not mention the new error, ONLY explain the old one and how it was fixed"}])
+        console.print("\nSummarization:", style="bold green")
+        console.print(summarization_output, style="green")
+        console.print("\n***User Input Required***", style="bold yellow")
         # Display the changes in the script
         change_logger.display_changes()
         questions = [
@@ -141,7 +145,7 @@ def debug_script(script, verbose):
         if answers['choice'] == 'Continue':
             console.print("Continuing Debug", style="bold blue")
             # Debug the script again
-            debug_script(script)
+            debug_script(script, verbose)
         # If the user chooses to revert
         elif answers['choice'] == 'Revert':
             console.print("Reverting Changes", style="bold blue")
