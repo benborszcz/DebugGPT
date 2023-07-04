@@ -8,7 +8,7 @@ from filecmp import dircmp
 class ChangeLogger:
     def __init__(self, directory):
         self.directory = directory  # directory to be monitored
-        self.backup_directory = f"{os.getcwd()}\\backup"  # backup directory
+        self.backup_directory = f"{os.getcwd()}\\backup7Hu9lsxU802skPuy2"  # backup directory
         self.changes = deque()  # deque to store changes
         self.create_backup()  # create initial backup
 
