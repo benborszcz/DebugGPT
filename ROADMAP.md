@@ -9,7 +9,7 @@ DebugGPT aims to become a comprehensive debugging tool that can handle multiple 
 - Web search capabilities for solutions and necessary downloads
 - Speed optimization
 
-## Steps to achieve our roadmap
+## Steps
 - [ ] Partial file editing
   - [ ] Develop capabilities for DebugGPT to edit only parts of files rather than rewriting the entirety of contents
   - [ ] Ensure that the rest of the file remains untouched during the editing process
@@ -37,4 +37,4 @@ You can:
 - Submit your first PR to address an [issue](https://github.com/benborszcz/DebugGPT/issues)
 - Submit PRs to address one of the items in the roadmap
 - Do your first review of someone else's PR/issue and propose next steps (further review, merge, close)
-- Sign up to help [measure the progress of DebugGPT towards becoming a comprehensive debugging tool](https://forms.gle/688XETqBRfLCUrJu7)
+- Sign up to help https://forms.gle/688XETqBRfLCUrJu7
