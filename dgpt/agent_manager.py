@@ -1,8 +1,11 @@
+# Import necessary modules and classes
 from .agent import Agent
 from .get_files import GetFiles
 from .edit_file import EditFile
 
+# Define the AgentManager class
 class AgentManager:
+    # Initialize the AgentManager with a dictionary of agents
     def __init__(self):
         self.agents = {
             "Chat": Agent("Chat"),
@@ -15,10 +18,13 @@ class AgentManager:
             "Revert": Agent("Revert")
         }
 
+    # Generate a response using the specified agent
     def generate(self, agent_id: str, messages: list = None):
         if messages == None : messages = []
 
+        # Call the generate method of the specified agent
         response = self.agents[agent_id].generate(messages=messages)
 
+        # Extract the response message from the response
         response_message = response['choices'][0]['message']['content']
         return response_message
