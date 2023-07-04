@@ -4,3 +4,4 @@ backoff
 rich
 inquirer
 pathspec
+pyfiglet
