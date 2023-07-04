@@ -50,3 +50,6 @@ If you have any questions or feedback, please feel free to contact us.
 ## Acknowledgements
 
 DebugGPT is not possible without the amazing work of the OpenAI team on the GPT-3.5 model. We would like to express our gratitude to them for making such a powerful tool available to the public.
+
+## Example
+https://user-images.githubusercontent.com/88807186/250950217-66b1b5f1-11b0-4bbc-8242-84e5c7a83eb0.mov
