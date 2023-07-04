@@ -27,7 +27,7 @@ OPENAI_API_KEY=your-api-key-here
 To use DebugGPT, simply run the `dgpt` command followed by the path to the Python script you want to debug:
 
 ```bash
-dgpt script.py
+dgpt script.py -s
 ```
 Use -v for verbose and -s for slim. We recommend -s for normal use and -v for more complicated errors or learning how the tool works.
 
