@@ -3,3 +3,4 @@ openai
 backoff
 rich
 inquirer
+pathspec
