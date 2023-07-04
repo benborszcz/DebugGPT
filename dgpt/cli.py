@@ -8,6 +8,7 @@ import inquirer
 import sys
 import pathspec
 import os
+import re
 
 # Install traceback for rich library
 install()
@@ -51,6 +52,22 @@ def visualize_file_structure(folder_path, ignore_gitignored=False):
 
     return ''.join(output)
 
+def extract_filenames(text):
+    # Remove everything between ```
+    pattern = r'```.*?```'
+    clean_text = re.sub(pattern, '', text, flags=re.DOTALL)
+
+    # Extract filenames
+    pattern = r'(?<=# )\w+\.py'
+    matches = re.findall(pattern, clean_text)
+
+    # Create output string
+    output = "Files Requested:\n"
+    for match in matches:
+        output += match + "\n"
+
+    return output
+
 # Define a function to debug a script
 def debug_script(script):
     # Create a change logger object
@@ -70,7 +87,7 @@ def debug_script(script):
         console.print("-----Requesting Files-----", style="bold blue")
         # Generate file getter output
         file_getter_output = manager.generate("FileRequester", [{"role":"user","content":str(error_analysis_output)+"\n\n"+str(visualize_file_structure(os.getcwd()))}])
-        console.print(file_getter_output, style="bold green")
+        console.print(extract_filenames(file_getter_output), style="bold green")
         console.print("-----Planning Solution-----", style="bold blue")
         # Generate step planner output
         step_planner_output = manager.generate("StepPlanner", [{"role":"user","content":(str(error_analysis_output)+"\n\n"+str(file_getter_output))}])
