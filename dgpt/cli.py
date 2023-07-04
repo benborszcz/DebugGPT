@@ -6,6 +6,7 @@ from rich.console import Console
 from rich.traceback import install
 import inquirer
 import sys
+import pathspec
 import os
 
 # Install traceback for rich library
@@ -16,6 +17,39 @@ console = Console()
 
 # Create an agent manager object
 manager = AgentManager()
+
+def read_gitignore(folder_path):
+    gitignore_path = os.path.join(folder_path, ".gitignore")
+    if os.path.exists(gitignore_path):
+        with open(gitignore_path, "r") as gitignore_file:
+            return gitignore_file.read().splitlines()
+    return []
+
+def visualize_file_structure(folder_path, ignore_gitignored=False):
+    gitignore_patterns = read_gitignore(folder_path) if ignore_gitignored else []
+    spec = pathspec.PathSpec.from_lines(pathspec.patterns.GitWildMatchPattern, gitignore_patterns)
+
+    output = []
+
+    def _visualize_directory(root, prefix=''):
+        nonlocal spec
+        for name in os.listdir(root):
+            file_path = os.path.join(root, name)
+            if ignore_gitignored:
+                if spec.match_file(file_path) or name in {".gitignore", ".gcloudignore", ".git"}:
+                    print(f"{file_path} Skipped")
+                    continue
+
+            if os.path.isfile(file_path):
+                output.append(f"{prefix}|---{name}\n")
+            elif os.path.isdir(file_path):
+                output.append(f"{prefix}+---{name}\n")
+                _visualize_directory(file_path, prefix=prefix + '|   ')
+
+    output.append(f"{os.path.basename(folder_path)}\n")
+    _visualize_directory(folder_path)
+
+    return ''.join(output)
 
 # Define a function to debug a script
 def debug_script(script):
@@ -35,7 +69,7 @@ def debug_script(script):
         console.print(error_analysis_output, style="bold red")
         console.print("-----Requesting Files-----", style="bold blue")
         # Generate file getter output
-        file_getter_output = manager.generate("FileRequester", [{"role":"user","content":str(error_analysis_output)}])
+        file_getter_output = manager.generate("FileRequester", [{"role":"user","content":str(error_analysis_output)+"\n\n"+str(visualize_file_structure(os.getcwd()))}])
         console.print(file_getter_output, style="bold green")
         console.print("-----Planning Solution-----", style="bold blue")
         # Generate step planner output
