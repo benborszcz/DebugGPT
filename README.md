@@ -23,7 +23,7 @@ OPENAI_API_KEY=your-api-key-here
 
 Now run pip install:
 ```bash
-pip install .
+pip install -e .
 ```
 ## Usage
 
