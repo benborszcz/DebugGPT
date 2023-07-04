@@ -19,6 +19,11 @@ class ChangeLogger:
         # copy the directory to be monitored to the backup directory
         shutil.copytree(self.directory, self.backup_directory, ignore=shutil.ignore_patterns('.git'))
 
+    def remove_backup(self):
+        # if backup directory exists, remove it
+        if os.path.exists(self.backup_directory):
+            shutil.rmtree(self.backup_directory, ignore_errors=True)
+
     def check_changes(self):
         # compare the directory and the backup directory
         comparison = dircmp(self.directory, self.backup_directory)

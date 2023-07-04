@@ -16,6 +16,8 @@ import re
 # Install traceback for rich library
 install()
 
+change_logger = None
+
 # Create a console object for rich library
 console = Console()
 
@@ -73,7 +75,7 @@ def extract_filenames(text):
 
 # Define a function to debug a script
 def debug_script(script, verbose, slim):
-    # Create a change logger object
+    global change_logger
     change_logger = ChangeLogger(os.path.dirname(os.path.abspath(script)))
     # Create a script runner object
     runner = ScriptRunner(script)
@@ -210,6 +212,7 @@ def debug_script(script, verbose, slim):
 
 # Define the main function
 def main():
+    global change_logger
     # Create an argument parser
     parser = argparse.ArgumentParser(description='Debug a Python script with DebugGPT.')
     parser.add_argument('script_file', type=str, help='The Python script to debug.')
@@ -237,6 +240,22 @@ def main():
     ]
     # Prompt the user to answer the question
     answers = inquirer.prompt(questions)
+
+    # Create a change logger object
+    change_logger = ChangeLogger(os.path.dirname(os.path.abspath(args.script_file)))
+
     if answers['choice'] == 'Yes': debug_script(args.script_file, args.verbose, args.slim)
     console.print("All Errors Solved or DebugGPT Terminated", style="italic purple")
+    
+
+    questions = [
+        inquirer.List('choice',
+                    message="Would you like to remove the backup?",
+                    choices=['Yes', 'No'],
+                    ),
+    ]
+    # Prompt the user to answer the question
+    answers = inquirer.prompt(questions)
+    if answers['choice'] == 'Yes': change_logger.remove_backup()
+
     console.rule("[bold blue]https://github.com/benborszcz/DebugGPT")
