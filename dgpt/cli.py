@@ -70,7 +70,7 @@ def extract_filenames(text):
     return output
 
 # Define a function to debug a script
-def debug_script(script, verbose):
+def debug_script(script, verbose, slim):
     # Create a change logger object
     change_logger = ChangeLogger(os.path.dirname(os.path.abspath(script)))
     # Create a script runner object
@@ -81,19 +81,20 @@ def debug_script(script, verbose):
     console.print(output)
     # If the script run status is not successful
     if not status:
-        console.print("Analyzing Output", style="bold blue")
+        if slim: console.print("DebugGPT Running", style="bold blue")
+        if not slim or verbose: console.print("Analyzing Output", style="bold blue")
         # Generate error analysis output
         error_analysis_output = manager.generate("ErrorAnalysis", [{"role":"user","content":output}])
         if verbose: console.print(error_analysis_output, style="bold red")
-        console.print("Requesting Files", style="bold blue")
+        if not slim or verbose: console.print("Requesting Files", style="bold blue")
         # Generate file getter output
         file_getter_output = manager.generate("FileRequester", [{"role":"user","content":str(error_analysis_output)+"\n\n"+str(visualize_file_structure(os.getcwd()))}])
         if verbose: console.print(extract_filenames(file_getter_output), style="bold green")
-        console.print("Planning Solution", style="bold blue")
+        if not slim or verbose: console.print("Planning Solution", style="bold blue")
         # Generate step planner output
         step_planner_output = manager.generate("StepPlanner", [{"role":"user","content":(str(error_analysis_output)+"\n\n"+str(file_getter_output))}])
         if verbose: console.print(step_planner_output, style="bold green")
-        console.print("Editing Files", style="bold blue")
+        if not slim or verbose: console.print("Editing Files", style="bold blue")
         # Generate code modifier output
         code_modifier_output = manager.generate("CodeModifier", [{"role":"user","content":(str(error_analysis_output)+"\n\n"+str(file_getter_output)+"\n\n"+str(step_planner_output))}])
         if verbose: console.print(code_modifier_output, style="bold green")
@@ -110,11 +111,11 @@ def debug_script(script, verbose):
         # If the new script run status is not successful
         if not status:
             console.print("DebugGPT has identified another/new error\n", style="bold red")
-            console.print("Analyzing Output", style="bold blue")
+            if not slim or verbose: console.print("Analyzing Output", style="bold blue")
             # Generate edit analysis output
             edit_analysis_output = manager.generate("ErrorAnalysis", [{"role":"user","content":new_output}])
             if verbose: console.print(edit_analysis_output, style="bold red")
-            console.print("Analyzing Progress", style="bold blue")
+            if not slim or verbose: console.print("Analyzing Progress", style="bold blue")
             # Generate compare errors output
             compare_errors_output = manager.generate("ErrorComparison", [{"role":"user","content":f"Old Error: {str(error_analysis_output)}\n\nNew Error:{str(edit_analysis_output)}"}])
             if verbose: console.print(compare_errors_output, style="bold green")
@@ -126,7 +127,7 @@ def debug_script(script, verbose):
             else: 
                 console.print("\nDebugGPT has identified no/reverse progress was made\n", style="bold red")
         
-        console.print("Deciding Next Step", style="bold blue")
+        if not slim or verbose: console.print("Deciding Next Step", style="bold blue")
         summarization_output = manager.generate("Summarizer", [{"role":"user","content":"# Original Output\n"+str(error_analysis_output)+"\n\n# Fix\n"+str(step_planner_output)+"\n\n# New Output Comparison\n"+str(compare_errors_output)+"\n\nSummarize what happened in 2 sentences, cover what was wrong and what was changed. Do not mention the new error, ONLY explain the old one and how it was fixed"}])
         console.print("\nSummarization:", style="bold green")
         console.print(summarization_output, style="green")
@@ -174,9 +175,10 @@ def main():
     parser = argparse.ArgumentParser(description='Debug a Python script with DebugGPT.')
     parser.add_argument('script_file', type=str, help='The Python script to debug.')
     parser.add_argument('-v', '--verbose', action='store_true', help='Enable verbose output.')
+    parser.add_argument('-s', '--slim', action='store_true', help='Enable slim output.')
 
     # Parse the command line arguments
     args = parser.parse_args()
 
     # Pass the verbose flag to the debug_script function
-    debug_script(args.script_file, args.verbose)
+    debug_script(args.script_file, args.verbose, args.slim)
