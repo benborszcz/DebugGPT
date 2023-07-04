@@ -11,6 +11,8 @@ setup(
         'backoff',
         'rich',
         'inquirer',
+        'pathspec',
+        'pyfiglet'
     ],
     entry_points={
         'console_scripts': [
