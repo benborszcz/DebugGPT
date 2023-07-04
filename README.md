@@ -29,6 +29,7 @@ To use DebugGPT, simply run the `dgpt` command followed by the path to the Pytho
 ```bash
 dgpt script.py
 ```
+Use -v for verbose and -s for slim. We recommend -s for normal use and -v for more complicated errors or learning how the tool works.
 
 DebugGPT will run the script, analyze any errors that occur, and provide a step-by-step plan to fix them. It will then generate the necessary code to fix the errors and apply the changes to the script. After applying the changes, DebugGPT will re-run the script to check if the changes have improved the script or solved the errors.
 
