@@ -2,6 +2,7 @@
 
 DebugGPT aims to become a comprehensive debugging tool that can handle multiple programming languages and interact with the system to perform tasks like installing necessary packages or searching the web for solutions. Here are the main milestones we believe will significantly enhance DebugGPT's capabilities:
 
+- Partial file editing
 - Support for multiple programming languages
 - Incorporating human input for complex problem-solving
 - Enabling system-level interactions
@@ -9,7 +10,9 @@ DebugGPT aims to become a comprehensive debugging tool that can handle multiple 
 - Speed optimization
 
 ## Steps to achieve our roadmap
-
+- [ ] Partial file editing
+  - [ ] Develop capabilities for DebugGPT to edit only parts of files rather than rewriting the entirety of contents
+  - [ ] Ensure that the rest of the file remains untouched during the editing process
 - [ ] Support for multiple programming languages
   - [ ] Extend the error analysis and code modification capabilities to JavaScript
   - [ ] Extend the error analysis and code modification capabilities to Java
