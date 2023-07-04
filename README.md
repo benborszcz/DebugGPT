@@ -8,12 +8,11 @@ We aim to extend DebugGPT's capabilities to handle multiple programming language
 
 ## Installation
 
-DebugGPT requires Python 3.6 or later. You can install it by cloning the repository and running pip install:
+DebugGPT requires Python 3.6 or later. You start by cloning the repository:
 
 ```bash
 git clone https://github.com/benborszcz/DebugGPT.git
 cd DebugGPT
-pip install .
 ```
 
 Before you start using DebugGPT, you need to set up your OpenAI API key. Create a `.env` file in the root directory of the project and add your OpenAI API key like this:
@@ -22,6 +21,10 @@ Before you start using DebugGPT, you need to set up your OpenAI API key. Create 
 OPENAI_API_KEY=your-api-key-here
 ```
 
+Now run pip install:
+```bash
+pip install .
+```
 ## Usage
 
 To use DebugGPT, simply run the `dgpt` command followed by the path to the Python script you want to debug:
