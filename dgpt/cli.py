@@ -31,7 +31,7 @@ def read_gitignore(folder_path):
             return gitignore_file.read().splitlines()
     return []
 
-def visualize_file_structure(folder_path, ignore_gitignored=False):
+def visualize_file_structure(folder_path, ignore_gitignored=True):
     gitignore_patterns = read_gitignore(folder_path) if ignore_gitignored else []
     spec = pathspec.PathSpec.from_lines(pathspec.patterns.GitWildMatchPattern, gitignore_patterns)
 
@@ -42,7 +42,9 @@ def visualize_file_structure(folder_path, ignore_gitignored=False):
         for name in os.listdir(root):
             file_path = os.path.join(root, name)
             if ignore_gitignored:
-                if spec.match_file(file_path) or name in {".gitignore", ".gcloudignore", ".git"}:
+                if "backup7Hu9lsxU802skPuy2" in file_path or "__pycache__" in file_path:
+                    continue
+                if spec.match_file(file_path) or name in {".gitignore", ".gcloudignore", ".git", "backup", "__pycache__"}:
                     print(f"{file_path} Skipped")
                     continue
 
