@@ -22,21 +22,21 @@ class Agent:
             self.functions = functions
     
     # Generate a response using the OpenAI API
-    def generate(self, messages: list, temperature=0.1, presence_penalty=0.0, frequency_penalty=0.0, max_tokens=1000):      
+    def generate(self, messages: list, temperature=0.1, presence_penalty=0.0, frequency_penalty=0.0, max_tokens=1000, model='gpt-3.5-turbo'):      
         local_messages = []
         local_messages.extend(messages)
         local_messages.insert(0, {"role": "system", "content": self.system})
         if self.additional_messages != None: local_messages.insert(1, self.additional_messages)
-        response = self.chat_completion(local_messages)
+        response = self.chat_completion(local_messages, model=model)
         return response
     
     # Use exponential backoff to retry the chat completion in case of an exception
     @backoff.on_exception(backoff.expo, Exception, max_tries=3, on_backoff=lambda details: print(f"Retrying for the {details['tries']} time"))
-    def chat_completion(self, messages: list, temperature=0.4, presence_penalty=0.1, frequency_penalty=0.1, max_tokens=1000):
+    def chat_completion(self, messages: list, temperature=0.4, presence_penalty=0.1, frequency_penalty=0.1, max_tokens=1000, model='gpt-3.5-turbo'):
         # Generate a response using the OpenAI API
         if self.functions == None:
             response = openai.ChatCompletion.create(
-                model="gpt-3.5-turbo-0613",
+                model=model,
                 messages=messages,
                 temperature=temperature,
                 presence_penalty=presence_penalty,
@@ -51,7 +51,7 @@ class Agent:
                 passed_functions.append(value.to_dict())
 
             response = openai.ChatCompletion.create(
-                model="gpt-3.5-turbo-0613",
+                model=model,
                 messages=messages,
                 temperature=temperature,
                 presence_penalty=presence_penalty,

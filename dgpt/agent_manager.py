@@ -21,11 +21,11 @@ class AgentManager:
         }
 
     # Generate a response using the specified agent
-    def generate(self, agent_id: str, messages: list = None):
+    def generate(self, agent_id: str, messages: list = None, model='gpt-3.5-turbo'):
         if messages == None : messages = []
 
         # Call the generate method of the specified agent
-        response = self.agents[agent_id].generate(messages=messages)
+        response = self.agents[agent_id].generate(messages=messages, model=model)
 
         # Extract the response message from the response
         response_message = response['choices'][0]['message']['content']
