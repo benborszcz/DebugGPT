@@ -22,7 +22,8 @@ class Agent:
             self.functions = functions
     
     # Generate a response using the OpenAI API
-    def generate(self, messages: list, temperature=0.1, presence_penalty=0.0, frequency_penalty=0.0, max_tokens=1000, model='gpt-3.5-turbo'):      
+    def generate(self, messages: list, temperature=0.1, presence_penalty=0.0, frequency_penalty=0.0, max_tokens=1000, model='gpt-3.5-turbo'):
+        
         local_messages = []
         local_messages.extend(messages)
         local_messages.insert(0, {"role": "system", "content": self.system})
@@ -70,3 +71,15 @@ class Agent:
                 return {'choices': [{'message': {'content':function_response}}]}
             
             return response
+
+# Define the square function
+
+def square(x):
+    if not isinstance(x, (int, float)):
+        try:
+            x = float(x)
+        except ValueError:
+            # Handle the case when the argument cannot be converted to a numeric value
+            # You can choose to raise an exception or return a default value
+            return 0  # Return 0 as a default value
+    return x * x

@@ -2,6 +2,7 @@
 from .agent import Agent
 from .get_files import GetFiles
 from .edit_file import EditFile
+from . import config
 
 
 # Define the AgentManager class
@@ -24,9 +25,12 @@ class AgentManager:
     def generate(self, agent_id: str, messages: list = None, model='gpt-3.5-turbo'):
         if messages == None : messages = []
 
+        if config.DEBUG: print(str(messages))
         # Call the generate method of the specified agent
         response = self.agents[agent_id].generate(messages=messages, model=model)
-
+        if config.DEBUG: print(str(response))
         # Extract the response message from the response
         response_message = response['choices'][0]['message']['content']
+
+        
         return response_message

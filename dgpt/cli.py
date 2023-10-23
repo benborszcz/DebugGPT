@@ -65,7 +65,7 @@ def extract_filenames(text):
     clean_text = re.sub(pattern, '', text, flags=re.DOTALL)
 
     # Extract filenames
-    pattern = r'(?<=# )\w+\.py'
+    pattern = r'(?<=# )\w+\.\w+'
     matches = re.findall(pattern, clean_text)
 
     # Create output string
@@ -118,7 +118,7 @@ def debug_script(script, verbose, slim, gpt4, prev_result=None, prev_error_analy
             if prev_error_analysis: 
                 error_analysis_output = prev_error_analysis
             else:
-                error_analysis_output = manager.generate("ErrorAnalysis", [{"role":"user","content":output}], model=model)
+                error_analysis_output = manager.generate("ErrorAnalysis", [{"role":"user","content":f"Running File: {script}\nOutput:\n{output}"}], model=model)
             if verbose: console.print(error_analysis_output, style="bold red")
             if not slim or verbose: console.print("Requesting Files", style="bold blue")
             if slim: progress.update(task, advance=1)
@@ -157,7 +157,7 @@ def debug_script(script, verbose, slim, gpt4, prev_result=None, prev_error_analy
                 if slim: task = progress.add_task("[cyan]Processing...", total=len(steps_2))
                 if not slim or verbose: console.print("Analyzing Output", style="bold blue")
                 # Generate edit analysis output
-                edit_analysis_output = manager.generate("ErrorAnalysis", [{"role":"user","content":new_output}], model=model)
+                edit_analysis_output = manager.generate("ErrorAnalysis", [{"role":"user","content":f"Running File: {script}\nOutput:\n{new_output}"}], model=model)
                 if verbose: console.print(edit_analysis_output, style="bold red")
                 if not slim or verbose: console.print("Analyzing Progress", style="bold blue")
                 if slim: progress.update(task, advance=1)
