@@ -76,7 +76,7 @@ def extract_filenames(text):
     return output
 
 # Define a function to debug a script
-def debug_script(script, verbose, slim, prev_result=None, prev_error_analysis=None):
+def debug_script(script, verbose, slim, gpt4, prev_result=None, prev_error_analysis=None):
     global change_logger
     change_logger = ChangeLogger(os.path.dirname(os.path.abspath(script)))
     # Create a script runner object
@@ -95,8 +95,8 @@ def debug_script(script, verbose, slim, prev_result=None, prev_error_analysis=No
         'Checking Progress',
     ]
 
-    # Create a progress bar
-
+    model = "gpt-3.5-turbo"
+    if gpt4: model = "gpt-4"
 
     console.print(f"Running {script}", style="bold blue")
     # Run the script and get the status and output
@@ -118,22 +118,22 @@ def debug_script(script, verbose, slim, prev_result=None, prev_error_analysis=No
             if prev_error_analysis: 
                 error_analysis_output = prev_error_analysis
             else:
-                error_analysis_output = manager.generate("ErrorAnalysis", [{"role":"user","content":output}])
+                error_analysis_output = manager.generate("ErrorAnalysis", [{"role":"user","content":output}], model=model)
             if verbose: console.print(error_analysis_output, style="bold red")
             if not slim or verbose: console.print("Requesting Files", style="bold blue")
             if slim: progress.update(task, advance=1)
             # Generate file getter output
-            file_getter_output = manager.generate("FileRequester", [{"role":"user","content":str(error_analysis_output)+"\n\n"+str(visualize_file_structure(os.getcwd()))}])
+            file_getter_output = manager.generate("FileRequester", [{"role":"user","content":str(error_analysis_output)+"\n\n"+str(visualize_file_structure(os.getcwd()))}], model=model)
             if verbose: console.print(extract_filenames(file_getter_output), style="bold green")
             if not slim or verbose: console.print("Planning Solution", style="bold blue")
             if slim: progress.update(task, advance=1)
             # Generate step planner output
-            step_planner_output = manager.generate("StepPlanner", [{"role":"user","content":(str(error_analysis_output)+"\n\n"+str(file_getter_output))}])
+            step_planner_output = manager.generate("StepPlanner", [{"role":"user","content":(str(error_analysis_output)+"\n\n"+str(file_getter_output))}], model=model)
             if verbose: console.print(step_planner_output, style="bold green")
             if not slim or verbose: console.print("Editing Files", style="bold blue")
             if slim: progress.update(task, advance=1)
             # Generate code modifier output
-            code_modifier_output = manager.generate("CodeModifier", [{"role":"user","content":(str(error_analysis_output)+"\n\n"+str(file_getter_output)+"\n\n"+str(step_planner_output))}])
+            code_modifier_output = manager.generate("CodeModifier", [{"role":"user","content":(str(error_analysis_output)+"\n\n"+str(file_getter_output)+"\n\n"+str(step_planner_output))}], model=model)
             if verbose: console.print(code_modifier_output, style="bold green")
             if slim: 
                 progress.update(task, advance=1)
@@ -157,16 +157,16 @@ def debug_script(script, verbose, slim, prev_result=None, prev_error_analysis=No
                 if slim: task = progress.add_task("[cyan]Processing...", total=len(steps_2))
                 if not slim or verbose: console.print("Analyzing Output", style="bold blue")
                 # Generate edit analysis output
-                edit_analysis_output = manager.generate("ErrorAnalysis", [{"role":"user","content":new_output}])
+                edit_analysis_output = manager.generate("ErrorAnalysis", [{"role":"user","content":new_output}], model=model)
                 if verbose: console.print(edit_analysis_output, style="bold red")
                 if not slim or verbose: console.print("Analyzing Progress", style="bold blue")
                 if slim: progress.update(task, advance=1)
                 # Generate compare errors output
-                compare_errors_output = manager.generate("ErrorComparison", [{"role":"user","content":f"Old Error: {str(error_analysis_output)}\n\nNew Error:{str(edit_analysis_output)}"}])
+                compare_errors_output = manager.generate("ErrorComparison", [{"role":"user","content":f"Old Error: {str(error_analysis_output)}\n\nNew Error:{str(edit_analysis_output)}"}], model=model)
                 if verbose: console.print(compare_errors_output, style="bold green")
                 if slim: progress.update(task, advance=1)
                 # Generate progress id output
-                progress_id_output = manager.generate("ProgressIdentifier", [{"role":"user","content":str(compare_errors_output)}])
+                progress_id_output = manager.generate("ProgressIdentifier", [{"role":"user","content":str(compare_errors_output)}], model=model)
                 if slim: 
                     progress.update(task, advance=1)
                     progress.stop()
@@ -178,7 +178,7 @@ def debug_script(script, verbose, slim, prev_result=None, prev_error_analysis=No
                 console.print("DebugGPT has identified no/reverse progress was made", style="bold red")
         
         if not slim or verbose: console.print("Deciding Next Step", style="bold blue")
-        summarization_output = manager.generate("Summarizer", [{"role":"user","content":"# Original Output\n"+str(error_analysis_output)+"\n\n# Fix\n"+str(step_planner_output)+"\n\n# New Output Comparison\n"+str(compare_errors_output)+"\n\nSummarize what happened in 2 sentences, cover what was wrong and what was changed. Do not mention the new error, ONLY explain the old one and how it was fixed"}])
+        summarization_output = manager.generate("Summarizer", [{"role":"user","content":"# Original Output\n"+str(error_analysis_output)+"\n\n# Fix\n"+str(step_planner_output)+"\n\n# New Output Comparison\n"+str(compare_errors_output)+"\n\nSummarize what happened in 2 sentences, cover what was wrong and what was changed. Do not mention the new error, ONLY explain the old one and how it was fixed"}], model=model)
         console.print("\nSummarization:", style="bold green")
         console.print(summarization_output, style="green")
         console.print("\n***User Input Required***", style="bold yellow")
@@ -215,7 +215,7 @@ def debug_script(script, verbose, slim, prev_result=None, prev_error_analysis=No
         if answers['choice'] == 'No': return False
         console.print("Continuing Debug", style="bold blue")
         # Debug the script again
-        debug_script(script, verbose, slim, prev_result, edit_analysis_output)
+        debug_script(script, verbose, slim, gpt4, prev_result, edit_analysis_output)
     return status
 
 # Define the main function
@@ -226,6 +226,7 @@ def main():
     parser.add_argument('script_file', type=str, help='The Python script to debug.')
     parser.add_argument('-v', '--verbose', action='store_true', help='Enable verbose output.')
     parser.add_argument('-s', '--slim', action='store_true', help='Enable slim output.')
+    parser.add_argument('-4', '--gpt4', action='store_true', help='Use GPT-4.')
 
     # Parse the command line arguments
     args = parser.parse_args()
@@ -252,7 +253,7 @@ def main():
     # Create a change logger object
     change_logger = ChangeLogger(os.path.dirname(os.path.abspath(args.script_file)))
 
-    if answers['choice'] == 'Yes': debug_script(args.script_file, args.verbose, args.slim)
+    if answers['choice'] == 'Yes': debug_script(args.script_file, args.verbose, args.slim, args.gpt4)
     console.print("All Errors Solved or DebugGPT Terminated", style="italic purple")
     
 
