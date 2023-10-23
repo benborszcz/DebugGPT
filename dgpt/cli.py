@@ -76,7 +76,7 @@ def extract_filenames(text):
     return output
 
 # Define a function to debug a script
-def debug_script(script, verbose, slim):
+def debug_script(script, verbose, slim, prev_result=None, prev_error_analysis=None):
     global change_logger
     change_logger = ChangeLogger(os.path.dirname(os.path.abspath(script)))
     # Create a script runner object
@@ -100,7 +100,10 @@ def debug_script(script, verbose, slim):
 
     console.print(f"Running {script}", style="bold blue")
     # Run the script and get the status and output
-    status, output = runner.run_script()
+    if not prev_error_analysis: 
+        status, output = runner.run_script()
+    else:
+        status, output = prev_result
     if not slim or verbose: console.print(output)
     # If the script run status is not successful
     if not status:
@@ -112,7 +115,10 @@ def debug_script(script, verbose, slim):
                 task = progress.add_task("[cyan]Processing...", total=len(steps_1))
             if not slim or verbose: console.print("Analyzing Output", style="bold blue")
             # Generate error analysis output
-            error_analysis_output = manager.generate("ErrorAnalysis", [{"role":"user","content":output}])
+            if prev_error_analysis: 
+                error_analysis_output = prev_error_analysis
+            else:
+                error_analysis_output = manager.generate("ErrorAnalysis", [{"role":"user","content":output}])
             if verbose: console.print(error_analysis_output, style="bold red")
             if not slim or verbose: console.print("Requesting Files", style="bold blue")
             if slim: progress.update(task, advance=1)
@@ -138,11 +144,12 @@ def debug_script(script, verbose, slim):
         # Run the script again and get the new status and output
         runner = ScriptRunner(script)
         status, new_output = runner.run_script()
+        prev_result = (status, new_output)
         if not slim or verbose: console.print(new_output)
         
         progress_id_output = 'f'
         compare_errors_output = ''
-
+        edit_analysis_output = ''
         # If the new script run status is not successful
         if not status:
             console.print("DebugGPT has identified another/new error", style="bold red")
@@ -188,28 +195,27 @@ def debug_script(script, verbose, slim):
         # If the user chooses to continue
         if answers['choice'] == 'Continue':
             console.print("Continuing Debug", style="bold blue")
-            # Debug the script again
-            debug_script(script, verbose, slim)
         # If the user chooses to revert
         elif answers['choice'] == 'Revert':
             console.print("Reverting Changes", style="bold blue")
             # Revert the last change in the script
             change_logger.revert_last_change()
-            if not slim or verbose: console.print("Deciding Next Step", style="bold blue")
-            console.print("***User Input Required***", style="bold yellow")
-            questions = [
-                inquirer.List('choice',
-                            message="Would you like to try debugging again?",
-                            choices=['Yes', 'No'],
-                            ),
-            ]
-            # Prompt the user to answer the question
-            answers = inquirer.prompt(questions)
-            # If the user chooses not to debug again
-            if answers['choice'] == 'No': return False
-            console.print("Continuing Debug", style="bold blue")
-            # Debug the script again
-            debug_script(script, verbose, slim)
+        
+        if not slim or verbose: console.print("Deciding Next Step", style="bold blue")
+        console.print("***User Input Required***", style="bold yellow")
+        questions = [
+            inquirer.List('choice',
+                        message="Would you like to try debugging again?",
+                        choices=['Yes', 'No'],
+                        ),
+        ]
+        # Prompt the user to answer the question
+        answers = inquirer.prompt(questions)
+        # If the user chooses not to debug again
+        if answers['choice'] == 'No': return False
+        console.print("Continuing Debug", style="bold blue")
+        # Debug the script again
+        debug_script(script, verbose, slim, prev_result, edit_analysis_output)
     return status
 
 # Define the main function
