@@ -45,7 +45,7 @@ def visualize_file_structure(folder_path, ignore_gitignored=True):
                 if "backup7Hu9lsxU802skPuy2" in file_path or "__pycache__" in file_path:
                     continue
                 if spec.match_file(file_path) or name in {".gitignore", ".gcloudignore", ".git", "backup", "__pycache__"}:
-                    print(f"{file_path} Skipped")
+                    #print(f"{file_path} Skipped")
                     continue
 
             if os.path.isfile(file_path):
